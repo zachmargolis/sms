@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+$:.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
+
+require 'database'
+
+sqlite_file = ARGV.first || 'data/e4abdddd416c93a213c1249f3929ea3474ae38df.sqlite'
+database = Database.new(sqlite_file)
+
+require 'models'
+require 'pry'
+
+binding.pry

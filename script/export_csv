@@ -1,0 +1,49 @@
+#!/usr/bin/env ruby
+
+src_database = ARGV[0]
+output_csv   = ARGV[1]
+
+if !src_database || !output_csv
+  puts "Usage: #{$0} source.sqlite output.csv"
+  exit 1
+end
+
+require 'csv'
+require 'time'
+
+$:.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
+
+require 'database'
+
+database = Database.new(src_database)
+
+require 'models'
+
+
+DATE_OFFSET = Time.parse('2001-01-01') - Time.at(0)
+
+page_size = 1000
+num_pages = Models::Message.count / page_size
+
+csv = CSV.new(File.new(output_csv, 'w'))
+
+csv << %w(message_id chat_id timestamp_ms address service text)
+
+num_pages.times.each do |page|
+  Models::Message.order(:rowid)
+    .eager(:handle, :chat)
+    .offset(page * page_size)
+    .first(page_size)
+    .each do |message|
+      csv << [
+        message.ROWID,
+        message.chat.ROWID,
+        (message.date + DATE_OFFSET) * 1000,
+        (message.handle && message.handle.id),
+        message.chat.service_name,
+        message.text,
+      ]
+    end
+end
+
+
