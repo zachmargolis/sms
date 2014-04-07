@@ -27,11 +27,11 @@ num_pages = Models::Message.count / page_size
 
 csv = CSV.new(File.new(output_csv, 'w'))
 
-csv << %w(message_id chat_id timestamp_ms address service text)
+csv << %w(message_id chat_id timestamp_ms type chat_size direction address text)
 
 num_pages.times.each do |page|
   Models::Message.order(:rowid)
-    .eager(:handle, :chat)
+    .eager(:handle, chat: :handles)
     .offset(page * page_size)
     .first(page_size)
     .each do |message|
@@ -39,8 +39,10 @@ num_pages.times.each do |page|
         message.ROWID,
         message.chat.ROWID,
         (message.date + DATE_OFFSET) * 1000,
-        (message.handle && message.handle.id),
         message.chat.service_name,
+        message.chat.handles.count,
+        (message.is_from_me == 1 ? 'sent' : 'received'),
+        (message.handle && message.handle.id),
         message.text,
       ]
     end
