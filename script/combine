@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+
+$:.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
+
+require 'csv'
+require 'time'
+require 'database'
+require 'active_support/time'
+
+@zone = ActiveSupport::TimeZone.new('UTC')
+
+def next_message_id
+  @next_message_id ||= 0
+  @next_message_id += 1
+end
+
+def timestamp_ms(date)
+  @new_epoch ||= @zone.parse('2001-01-01')
+  if date > @new_epoch.to_i
+    date * 1000
+  else
+    (date + @new_epoch.to_i) * 1000
+  end
+end
+
+def just_emojis(text)
+  text && text.chars.select { |c| c.ord > 1000 }.join
+end
+
+def each_by_page(relation, &block)
+  total = relation.count
+  page_size = 1000
+  num_pages = (total.to_f / page_size).ceil
+
+  results = []
+  num_pages.times.each do |page|
+    results += relation
+      .offset(page * page_size)
+      .first(page_size)
+      .map(&block)
+  end
+  results
+end
+
+def load_v1(file, database, csv)
+  require 'models/v1'
+
+  Models::V1.with_db(database) do
+    each_by_page(Models::V1::Message.eager(:group_member)) do |message|
+      csv << [
+        file,
+        next_message_id,
+        timestamp_ms(message.date),
+        'SMS',
+        message.group_member.count,
+        (message.is_from_me? ? 'sent' : 'received'),
+        message.address,
+        message.text,
+        just_emojis(message.text),
+      ]
+    end
+  end
+end
+
+def load_v2(file, database, csv)
+  require 'models/v2'
+
+  Models::V2.with_db(database) do
+    each_by_page(Models::V2::Message.eager(:handle, chat: :handles)) do |message|
+      csv << [
+        file,
+        next_message_id,
+        timestamp_ms(message.date),
+        message.chat.service_name,
+        message.chat.handles.count,
+        (message.is_from_me? ? 'sent' : 'received'),
+        (message.handle && message.handle.id),
+        message.text,
+        just_emojis(message.text),
+      ]
+    end
+  end
+end
+
+csv = CSV.generate do |csv|
+  csv << %w(file_id message_id timestamp_ms type chat_size direction address text emoji)
+  ARGV.each do |file|
+    Database.new(file, false) do |db|
+      db.tables.include?(:handle) ? load_v2(file, db, csv) : load_v1(file, db, csv)
+    end
+  end
+end
+
+puts csv
