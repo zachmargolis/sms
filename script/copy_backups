@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 
+set -ex
+
 BACKUP_DIR=~/Library/Application\ Support/MobileSync/Backup/
 DATABASE_NAME="3d0d7e5fb2ce288813306e4d4636395e047a3d28"
+IPHONE_DATAPROTECTION=~/Development/iphone-dataprotection
+EXPORT_DIR="data2"
 
-mkdir -p data
+mkdir -p $EXPORT_DIR
 
 for DIR in $(ls "$BACKUP_DIR"); do
-  cp -p "$BACKUP_DIR/$DIR/$DATABASE_NAME" "data/$DIR.sqlite"
+  backup="$BACKUP_DIR/$DIR"
+  database="$BACKUP_DIR/$DIR/$DATABASE_NAME"
+  if [[ $(file "$database") == *"SQLite"* ]]; then
+    cp -p "$database" "$EXPORT_DIR/$DIR.sqlite"
+  else
+    PYTHONPATH="$IPHONE_DATAPROTECTION/python_scripts/:$PYTHONPATH" \
+    python src/main/python/decrypt.py "$backup" "$EXPORT_DIR/$DIR.sqlite"
+  fi
 done
