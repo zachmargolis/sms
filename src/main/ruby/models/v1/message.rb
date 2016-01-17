@@ -1,6 +1,9 @@
 require 'sequel'
+require 'time'
 
 class Models::V1::Message < Sequel::Model(:message)
+  ZONE = ActiveSupport::TimeZone['UTC']
+
   many_to_many :group_member,
     join_table: :msg_group,
     left_key: :ROWID,
@@ -14,6 +17,10 @@ class Models::V1::Message < Sequel::Model(:message)
 
   def service
     'SMS'
+  end
+
+  def timestamp
+    ZONE.at(date)
   end
 end
 

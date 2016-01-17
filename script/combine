@@ -6,7 +6,9 @@ require 'csv'
 require 'time'
 require 'database'
 require 'active_support/time'
+require 'set'
 
+@print_warnings = ENV['PRINT_WARNINGS']
 @zone = ActiveSupport::TimeZone.new('UTC')
 
 def next_message_id
@@ -15,12 +17,7 @@ def next_message_id
 end
 
 def timestamp_ms(date)
-  @new_epoch ||= @zone.parse('2001-01-01')
-  if date > @new_epoch.to_i
-    date * 1000
-  else
-    (date + @new_epoch.to_i) * 1000
-  end
+  date.to_i * 1000
 end
 
 def just_emojis(text)
@@ -42,51 +39,79 @@ def each_by_page(relation, &block)
   results
 end
 
-def load_v1(file, database, csv)
+def load_v1(file, database, csv, guids)
   require 'models/v1'
 
   Models::V1.with_db(database) do
     each_by_page(Models::V1::Message.eager(:group_member)) do |message|
+      guid = "#{message.ROWID}|#{message.date}"
+
+      if guids.include?(guid)
+        $stderr.puts "skipping #{guid}" if @print_warnings
+        next
+      end
+
+      guids << guid
+
       csv << [
-        file,
-        next_message_id,
-        timestamp_ms(message.date),
-        'SMS',
-        message.group_member.count,
-        (message.is_from_me? ? 'sent' : 'received'),
-        message.address,
-        message.text,
-        just_emojis(message.text),
+        file,                                        # file_id
+        next_message_id,                             # message_id
+        timestamp_ms(message.timestamp),             # timestamp_ms
+        'SMS',                                       # type
+        message.group_member.count,                  # chat_size
+        (message.is_from_me? ? 'sent' : 'received'), # direction
+        message.address,                             # address
+        message.text,                                # text
+        just_emojis(message.text),                   # emoji
+        guid,                                        # guid
       ]
     end
   end
 end
 
-def load_v2(file, database, csv)
+def load_v2(file, database, csv, guids)
   require 'models/v2'
 
   Models::V2.with_db(database) do
     each_by_page(Models::V2::Message.eager(:handle, chat: :handles)) do |message|
+      if guids.include?(message.guid)
+        $stderr.puts "skipping #{message.guid}" if @print_warnings
+        next
+      end
+
+      guids << message.guid
+
       csv << [
-        file,
-        next_message_id,
-        timestamp_ms(message.date),
-        message.service,
-        message.chat.try(:handles).try(:count),
-        (message.is_from_me? ? 'sent' : 'received'),
-        (message.handle && message.handle.id),
-        message.text,
-        just_emojis(message.text),
+        file,                                        # file_id
+        next_message_id,                             # message_id
+        timestamp_ms(message.timestamp),             # timestamp_ms
+        message.service,                             # type
+        message.chat.try(:handles).try(:count),      # chat_size
+        (message.is_from_me? ? 'sent' : 'received'), # direction
+        (message.handle && message.handle.id),       # address
+        message.text,                                # text
+        just_emojis(message.text),                   # emoji
+        message.guid,                                # guid
       ]
     end
   end
 end
 
+guids = Set.new
 csv = CSV.generate do |csv|
-  csv << %w(file_id message_id timestamp_ms type chat_size direction address text emoji)
+  csv << %w(file_id message_id timestamp_ms type chat_size direction address text emoji guid)
   ARGV.each do |file|
-    Database.new(file, false) do |db|
-      db.tables.include?(:handle) ? load_v2(file, db, csv) : load_v1(file, db, csv)
+    begin
+      $stderr.puts "starting #{file}"
+      Database.new(file, false) do |db|
+        if db.tables.include?(:handle)
+          load_v2(file, db, csv, guids)
+        else
+          load_v1(file, db, csv, guids)
+        end
+      end
+    rescue => e
+      $stderr.puts "error in #{file}: #{e}"
     end
   end
 end

@@ -5,7 +5,7 @@ set -ex
 BACKUP_DIR=~/Library/Application\ Support/MobileSync/Backup/
 DATABASE_NAME="3d0d7e5fb2ce288813306e4d4636395e047a3d28"
 IPHONE_DATAPROTECTION=~/Development/iphone-dataprotection
-EXPORT_DIR="data2"
+EXPORT_DIR="data3"
 
 mkdir -p $EXPORT_DIR
 
