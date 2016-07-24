@@ -8,6 +8,10 @@ require 'database'
 require 'active_support/time'
 require 'set'
 
+if ARGV.empty?
+  abort "Usage: #{$0} database1.sqlite [database2.sqlite...]"
+end
+
 @print_warnings = ENV['PRINT_WARNINGS']
 @zone = ActiveSupport::TimeZone.new('UTC')
 
@@ -98,6 +102,7 @@ def load_v2(file, database, csv, guids)
 end
 
 guids = Set.new
+
 csv = CSV.generate do |csv|
   csv << %w(file_id message_id timestamp_ms type chat_size direction address text emoji guid)
   ARGV.each do |file|

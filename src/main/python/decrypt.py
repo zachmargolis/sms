@@ -1,3 +1,9 @@
+#
+# This is a small script that uses files from the iphone-dataprotection toolkit
+# but adds the ability to decrypt just one file (rather than the entire backup)
+# https://code.google.com/archive/p/iphone-dataprotection/
+#
+
 import os
 import plistlib
 import sys
